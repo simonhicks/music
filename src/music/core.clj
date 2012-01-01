@@ -19,5 +19,5 @@
         r (rand)]
     (some #(if (<= r (second %)) (first %) nil) norm-pairs)))
 
-(time (w-choose [:a 1] [:b 2] [:c 3]))
-(time (mapcat (fn [[k v]] [k (/ v 1000.0)]) (frequencies (take 1000 (repeatedly #(w-choose [:a 20] [:b 50] [:c 30]))))))
+;(time (w-choose [:a 1] [:b 2] [:c 3]))
+;(time (mapcat (fn [[k v]] [k (/ v 1000.0)]) (frequencies (take 1000 (repeatedly #(w-choose [:a 20] [:b 50] [:c 30]))))))
