@@ -1,115 +1,141 @@
 (ns music.playground
-  (:use [music.utils :only (hz)]
-        [music.synthesis.io]))
+  (:use [music.synthesis.io :only (create-wav-file *SAMPLE_RATE*)]
+        [music.utils :only (hz)]
+        [music.synthesis.core :only (write-batch)]
+        [music.synthesis.buffers :only (set-channel set-buffer get-channel-value set-channel-value)] :reload))
 
-(defn- create-unit-generator
-  "returns a function that takes an atom containing a map of control settings
-  and generates a lazy sequence of samples based on the given wave-function.
+; TODO 
+;
+; envelopes
+;   ; need to think about how to free a synth after the envelope has triggered
+;   ;   if any argument to mul returns nil, mul returns nil, therefore the chanel it's in gets set to nil
+;   (env-gen (adsr 1 2 0.3 4))
+;
+; other types of ugen like white noise, mul and add
 
-  wave-function should be a function that takes a phase (in radians) and a map 
-  of control settings and returns the position of the sample at that phase.
+(defmacro defwave
+  [name args wave-function]
+  (if (= 'freq (first args))
+    (let [extra-args (rest args)
+          arg-chs (map #(symbol (str % "-ch")) extra-args)]
+    `(defn ~name
+       [freq-ch# ~@arg-chs]
+       (map second (drop 1
+         (iterate (fn [[w# _#]]
+                    (let [freq# (get-channel-value freq-ch#)
+                          ~@(interleave extra-args ; bind the exra args to the values from the channels
+                                        (map #(list 'music.synthesis.buffers/get-channel-value %) arg-chs))
+                          sample-length# (/ (* 2 Math/PI freq#) *SAMPLE_RATE*)
+                          new-w# (+ w# sample-length#)
+                          sample# ((fn [~'w] ~wave-function) w#)]
+                      [new-w# sample#])) [0 0])))))
+    (throw (RuntimeException.
+        "The first argument to a function defined using defwave must be freq (frequency in hz)"))))
 
-  It is assumed that the control setting map contains a :freq key"
-  [wave-function]
-  (fn [settings]
-    (map second (drop 1
-      (iterate (fn [[phase _]]
-                 (let [freq (:freq @settings)
-                       sample-length (/ (* 2 Math/PI freq) *SAMPLE_RATE*) ; length of a sample in radians
-                       new-phase (+ phase sample-length)
-                       sample (wave-function phase @settings)]
-                   [new-phase sample])) [0 0])))))
+(defwave sin-seq
+  [freq phase]
+  (Math/sin (+ w phase)))
 
-(defmacro defugen
-  "Defines a unit generator function that takes an atom containing a map of control
-  settings and returns a lazy sequence of samples for this ugen.
+(defwave saw-seq
+  [freq]
+  (let [trunc-w (rem w (* 2 Math/PI))]
+    (+ -1 (* 2 (/ trunc-w (* Math/PI 2))))))
 
-  'wave-function' should be code that returns the value of the wave-function at the
-  given phase. This function will be used to generate the sequence of samples.
+(defwave sqr-seq
+  [freq]
+  (let [trunc-w (rem w (* 2 Math/PI))]
+    (if (< trunc-w Math/PI) 1 -1)))
 
-  When defining the wavefunction, the control settings are available in a map bound
-  to 'settings', and the phase is available as 'phase'"
-  [name & wave-function]
-  `(def ~name
-     (create-unit-generator
-       (fn [~'phase ~'settings] ~@wave-function))))
+(defwave pulse-seq
+  [freq width]
+  (let [trunc-w (rem w (* 2 Math/PI))]
+    (if (< trunc-w (* width 2 Math/PI)) 1 -1)))
 
-(defugen sin 
-  (Math/sin phase))
+(defwave tri-seq
+  [freq]
+  (let [trunc-w (rem w (* 2 Math/PI))]
+    (if (< trunc-w Math/PI)
+      (+ -1 (/ (* 2 trunc-w) Math/PI))
+      (- 1 (/ (* 2 (- trunc-w Math/PI)) Math/PI)))))
 
-(defugen saw
-  (let [trunc-phase (rem phase (* 2 Math/PI))]
-    (+ -1 (* 2 (/ trunc-phase (* Math/PI 2))))))
+(defn mul-seq [& channels]
+  (fn []
+    (apply * 
+      (map get-channel-value channels))))
 
-(defugen sqr
-  (let [trunc-phase (rem phase (* 2 Math/PI))]
-    (if (< trunc-phase Math/PI) 1 -1)))
-
-(defugen tri
-  (let [trunc-phase (rem phase (* 2 Math/PI))]
-    (if (< trunc-phase Math/PI)
-      (+ -1 (/ (* 2 trunc-phase) Math/PI))
-      (- 1 (/ (* 2 (- trunc-phase Math/PI)) Math/PI)))))
-
-(defugen ramp
-  (if (> phase (* 2 Math/PI)) nil
-    (+ 0 (/ phase (* Math/PI 2)))))
-
-
-
-; test
-
-(def mountain-king
-  [[0 1] [2 1] [3 1] [5 1]
-   [7 1] [3 1] [7 2]
-   [6 1] [2 1] [6 2]
-   [5 1] [1 1] [5 2]
-   [0 1] [2 1] [3 1] [5 1]
-   [7 1] [3 1] [7 1] [12 1]
-   [10 1] [7 1] [3 1] [7 1]
-   [10 2] [-2 2]])
+(defn add-seq [& channels]
+  (fn []
+    (apply +
+      (map get-channel-value channels))))
 
 (comment TEST CODE
-(let [data-file "/Users/simon/temp.dat"
-      audio-file "/Users/simon/sqr.wav"]
-  (write-samples data-file (take *SAMPLE_RATE* (sqr (atom {:freq 1}))) (take *SAMPLE_RATE* (repeat 0)))
-  (create-wav-file data-file audio-file))
+(def mountain-king
+  [[0 1]  [2 1] [3 1] [5 1] [7 1] [3 1] [7 2]
+   [6 1]  [2 1] [6 2]       [5 1] [1 1] [5 2]
+   [0 1]  [2 1] [3 1] [5 1] [7 1] [3 1] [7 1] [12 1] 
+   [10 1] [7 1] [3 1] [7 1] [10 2]      [10 2]      ])
 
 (let [melody mountain-king
       base-tone 60
-      beat-length 250
-      data-file "/Users/simon/temp.dat"
-      audio-file "/Users/simon/mountain-king.wav"]
-  (doseq [[tone beats] melody]
-    (let [freq (hz (+ base-tone tone))
-          duration  (* beat-length beats)
-          samples (take (* (/ duration 1000) *SAMPLE_RATE*) (sqr (atom {:freq freq})))]
-      (write-samples data-file samples (repeat 0))))
-  (create-wav-file data-file audio-file))
+      beat-length (* *SAMPLE_RATE* 0.25) ; 0.25 seconds per beat
+      path "/Users/simon/mountain-king.wav"
+      tmp (str path ".tmp")
 
-(let [data-file "/Users/simon/temp.dat"
-      audio-file "/Users/simon/slide.wav"
-      left-atom (atom {:freq 440})
-      left-seq (sqr left-atom)
-      right-atom (atom {:freq 880})
-      right-seq (sqr right-atom)
-      loop-length (/ (* 1 *SAMPLE_RATE*) 48000)
-      inc-freq (fn [settings]
-                 (assoc settings :freq 
-                        (+ (:freq settings)
-                           (/ 440 48000))))
-      dec-freq (fn [settings]
-                 (assoc settings :freq
-                        (- (:freq settings)
-                           (/ 440 48000))))] ; 1ms per loop
-  (loop [left left-seq
-         right right-seq
-         n 0]
-    (write-samples data-file (take loop-length left) 
-                             (take loop-length right))
-    (when (< n 48000)
-      (recur (drop loop-length left) 
-             (drop loop-length right)
-             (inc n))))
-  (create-wav-file data-file audio-file))
+      ; set up the instruments
+      ; create pulse width modulator
+      width-mod-freq-ch (set-channel 50)
+      width-mod-phase-ch (set-channel 0)
+      width-ch (set-channel (sin-seq width-mod-freq-ch width-mod-phase-ch) nil)
+      ; reduce the amplitude of the modulation
+      width-mod-amp-ch (set-channel 0.05)
+      scaled-width-ch (set-channel (mul-seq width-ch width-mod-amp-ch))
+      ; offset the modulation
+      width-mod-off-ch (set-channel 0.5)
+      wmod-ch (set-channel (add-seq scaled-width-ch width-mod-off-ch))
+      ; create a pwm synth
+      tone-ch (set-channel (hz base-tone))
+      inst (set-channel (sin-seq tone-ch scaled-width-ch) [0 1])]
+
+  (loop [events melody
+         batch-num 1]
+    (if-let [event (first events)]
+      (let [tone (+ base-tone (first event))
+            beats (second event)
+            dur (* beats beat-length)
+            batch-size 48]
+        (set-channel-value tone-ch (hz tone))
+        (doseq [i (range (/ dur batch-size))]
+          (write-batch batch-size tmp))
+        (recur (rest events) (+ batch-num (/ dur batch-size))))
+      (create-wav-file tmp path))))
+
+
+(let [batch-size 1000
+      ch1 (set-channel 220)
+      ch2 (set-channel 440)
+      ch3 (set-channel 660)
+      path "/Users/simon/test.wav"
+      tmp (str path ".tmp")
+      l (set-buffer 0)
+      r (set-buffer 1)]
+
+  ; set up the sin synths
+  (set-channel 3 (sin2 ch1) [l r])
+  (set-channel 4 (sin2 ch2) [l r])
+  (set-channel 5 (sin2 ch3) [l r])
+
+  ; write some sound 
+  (doseq [i (range (/ *SAMPLE_RATE* batch-size))]
+    (write-batch batch-size tmp))
+
+  ; change a frequency
+  (set-channel-value ch2 4)
+  (set-channel-value ch3 3)
+
+  ; write some more sound
+  (doseq [i (range (/ *SAMPLE_RATE* batch-size))]
+    (write-batch batch-size tmp))
+
+  ; create the wav file
+  (create-wav-file tmp path))
 )

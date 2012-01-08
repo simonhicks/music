@@ -22,13 +22,13 @@ PLANS
 
 
 PLAYGROUND FILES
-  music.playground  - basic initial creation of ugen lazy sequences for sin/sqr/saw/tri
-  music.playground2 - basic test of music.synthesis.buffers
-  music.playground3 - empty
+  music.playground  - creation of ugen lazy sequences - unfinished
+  music.playground2 - abstract for defsynth
+  music.playground3 - code to test the expansion of a simple defsynth macro
 
 
 ARCHITECTURE
-  ugens are modeled as lazy sequences, with control parameters being read dynamically either from other ugens or constants
+  ugens are modeled as lazy sequences, with control parameters being read dynamically from other lazy sequences. (other ugens, variables or constants... they're all modelled as lazy sequences)
 
   these lazy sequences are stored in "Channels" which are themselves stored in a vector called the CHANNEL_BANK
     Channels are referenced by index
@@ -40,6 +40,7 @@ ARCHITECTURE
       a target buffer index (optional)
         if the channel has a target buffer index, as each sample is calculated it is added to the buffer specified by that index.
         if the channel is to be routed to the final output, it should be routed to buffer 0 for left or 1 for right
+        the target buffer can also be an array of indices
       channels are recalculated in the order defined by their syntax, so a given channel should only depend on channels with lower indexes than themselves
 
   Buffers are used for mixing the output of Channels and/or piping the results elsewhere. They are stored in an vector called BUFFER_BANK
@@ -50,8 +51,9 @@ ARCHITECTURE
         this represents the current values of all the channels which write to this buffer
         when the Buffer is queried for it's value, the average of the values in this vector are returned.
       an target buffer index (optional)
+        the target buffer can be an index or an array of indices
     after the Channels have all written their values to the buffers, the buffers then do the same (each writes it's value into the buffer associated with it's target buffer index)
-      this occurs in increasing index order, so buffers can only write to Other buffers whose index is higher.
+      this occurs in decreasing index order, so buffers can only write to other buffers whose index is lower (therefore everything can write to the output buffers 0 & 1)
 
   To generate the sound we step through the sequences sample by sample, performing the following steps for each sample:
     drop the first value of each Channel's sequence to trigger calculation of the next sample
