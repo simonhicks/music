@@ -1,7 +1,5 @@
 (ns music.pitch
-  (:use [org.simonhicks.debug :only (db+)])
-  (:use [clojure.contrib.math :only (round abs)]))
-
+  (:require [music.utils :refer (round abs)]))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 ;; A collection of functions for working with pitch class sets
@@ -14,6 +12,7 @@
 ;; Therefore, 0 = C, 1 = C#, etc..
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 
 (def NOTES
   {:C 0 :c 0
@@ -32,7 +31,10 @@
 (defn midi-note [pitch]
   (if (keyword? pitch) (NOTES pitch) pitch))
 
-(def DIATONIC-MAJOR ; this maps the chords of any given major key to a semitone relative to the base and a chord type. eg. :iii corresponds to a minor chord ("-") starting on the 4th semi-tone of the scale.
+(def DIATONIC-MAJOR
+  ; this maps the chords of any given major key to a semitone relative to the
+  ; base and a chord type. eg. :iii corresponds to a minor chord ("-") starting
+  ; on the 4th semi-tone of the scale.
    {:i [0 :M]
     :i6 [0 :M6]
     :i64 [0 :M64]

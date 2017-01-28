@@ -1,5 +1,10 @@
-(ns music.utils
-  (:use [clojure.contrib.core :only (seqable?)]))
+(ns music.utils)
+
+(defn round [n]
+  (Math/round (double n)))
+
+(defn abs [n]
+  (Math/abs (double n)))
 
 (defn- midi->hz [note] ; copied from overtone so that we're not overtone dependent
   (* 440.0 (java.lang.Math/pow 2.0 (/ (- note 69.0) 12.0))))
@@ -8,7 +13,7 @@
   "coerces a midi note or pc to float frequency(s)"
   [arg]
   (let [coerce (comp float midi->hz)]
-    (if (seqable? arg)
+    (if (seq? arg)
       (map coerce arg)
       (coerce arg))))
 
