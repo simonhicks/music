@@ -22,7 +22,7 @@
   "Converts a pitch to a pitch-class, or a chord to a set of its pitch classes."
   [thing]
   (cond
-    (coll? thing)   (sort (map #(rem % 12) thing))
+    (coll? thing)   (sort (map ->pc thing))
     (number? thing) (rem (round thing) 12)
     :else           (rem (or (p/NOTES thing)
                              (p/note thing)) 12)))
@@ -170,7 +170,7 @@
       (cond (? chrd (f p i)) (f p i)
             (? chrd (s p i)) (s p i)
             (< i 7)        (recur (+ i 1) p)
-            :else          (throw (Exception. (str "no matching value to quantize to" p pc))))))))
+            :else          (throw (Exception. (str "no matching value to quantize to" p chrd))))))))
 
 (defn rand-pitch 
   "select random pitch from pitch class pc bounded by lo and hi. If no valid pitch is
@@ -362,14 +362,14 @@
         measure (fn [x] ; function to measure the distance from `x` to a note equivalent to `p`
                   (let [v (abs (- p x))]
                     (abs (min v (- 12 v)))))]
-     (int (apply min (map measure chrd)))))
+     (int (apply min (map measure pcs)))))
 
 (defn find-closest
   "returns the pitch in pitches that is closest to the set of pitch classes
   If multiple pitches are the closest return the first"
   [pitches pcs]
   (first
-    (sort-by #(distance % chrd) < pitches)))
+    (sort-by #(distance % pcs) < pitches)))
 
 (defn- remove-first 
   "Remove the first instance of n from coll"
@@ -395,27 +395,14 @@
                  (remove-first match notes-to-move)
                  (cons new-pitch moved-chord)))))))
 
-; (defn melody-by-step
-;   "generate a melody from a list of steps in a (pc) pitch class"
-;   [start steps pc]
-;   (loop [note 0
-;          degrees []
-;          remain steps]
-;     (if (empty? remain)
-;       (map #(relative start % pc) (conj degrees note))
-;       (recur (+ (first remain) note)
-;              (conj degrees note)
-;              (rest remain)))))
+(defn melody-by-step
+  "generate a melody from a list of steps in a chrd"
+  [start steps chrd]
+  (reductions #(relative %1 %2 chrd) (note start) steps))
 
-; (defn melody-by-ivl
-;   "generate a meldoy from a list of intervals"
-;   ([starting-pitch ivls]
-;     (loop [note (midi-note starting-pitch)
-;            notes []
-;            remain ivls]
-;       (if (empty? remain)
-;         (conj notes note)
-;         (recur (+ (first remain) note)
-;                (conj notes note)
-;                (rest remain)))))
-;   ([starting-pitch ivls octave] (melody-by-ivl (+ (* 12 octave) (midi-note starting-pitch)) ivls)))
+(defn melody-by-ivl
+  "generate a meldoy from a list of intervals"
+  ([starting-pitch ivls]
+    (reductions + (note starting-pitch) ivls))
+  ([starting-pitch ivls octave]
+   (melody-by-ivl (+ (* 12 octave) (note starting-pitch)) ivls)))

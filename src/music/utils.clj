@@ -1,5 +1,5 @@
 (ns music.utils
-  (use [overtone.core :only [midi->hz]]))
+  (:require [overtone.core :as o]))
 
 (defn round [n]
   (Math/round (double n)))
@@ -10,7 +10,7 @@
 (defn hz
   "coerces a midi note or pc to float frequency(s)"
   [arg]
-  (let [coerce (comp float midi->hz)]
+  (let [coerce (comp float o/midi->hz)]
     (if (seq? arg)
       (map coerce arg)
       (coerce arg))))
@@ -44,3 +44,23 @@
                 [t (->> values
                         (interleave controls)
                         (apply hash-map))])))))
+
+(defn beat-updater [m update-fn init]
+  (let [state (atom init)]
+    (letfn [(rec [beat]
+              (o/apply-at (dec (m beat))
+                        #'swap! [state update-fn])
+              (o/apply-by (m (inc beat))
+                        rec (inc beat) []))]
+      (rec (m)))
+    state))
+
+(defn bar-updater [m update-fn init]
+  (let [state (atom init)]
+    (letfn [(rec [bar]
+              (o/apply-at (dec (o/metro-bar m bar))
+                        #'swap! [state update-fn])
+              (o/apply-by (o/metro-bar m (inc bar))
+                        rec (inc bar) []))]
+      (rec (o/metro-bar m)))
+    state))
