@@ -1,6 +1,11 @@
 (ns music.pitch
-  (:require [music.utils :refer (round abs)]
-            [overtone.music.pitch :as p]))
+  (:require [overtone.music.pitch :as p]))
+
+(defn- round [n]
+  (Math/round (double n)))
+
+(defn- abs [n]
+  (Math/abs (double n)))
 
 (defn ->scale-name
   "Tries to normalize scale-names"
