@@ -1,10 +1,10 @@
 (ns music.utils
   (:require [overtone.core :as o]))
 
-(defn round [n]
+(defn- round [n]
   (Math/round (double n)))
 
-(defn abs [n]
+(defn- abs [n]
   (Math/abs (double n)))
 
 (defn hz
@@ -45,6 +45,7 @@
                         (interleave controls)
                         (apply hash-map))])))))
 
+
 (defn beat-updater [m update-fn init]
   (let [state (atom init)]
     (letfn [(rec [beat]
@@ -64,3 +65,4 @@
                         rec (inc bar) []))]
       (rec (o/metro-bar m)))
     state))
+
