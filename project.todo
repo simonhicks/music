@@ -1,0 +1,35 @@
+# Concept
+## live.clj
+Top level API that you actually use.
+
+- sets up global state (scheduler, instrument rack, etc.)
+- all the functions assume that global state
+- designed for live playing
+  - loop player functions
+  - high level scheduling macros
+  - high level midi even recording functions
+
+## studio.clj
+[ ] create drum rack
+- 16 channels, each plays a different drum sample
+
+
+## sequencer.clj
+[ ] drum sequencer
+- plays a pattern defined using rhythm patter string
+- maps special characters to channel numbers `(!@#$%^&*_+-=,.\/)`
+
+# Things still to figure out
+## sharing values between threads
+- something that lets me expand :chord -> the current chord, or whatever
+- also something that lets me update these values^^
+
+## midi / mpe
+- recording midi input
+
+# fx
+[ ] fx rack in studio.clj
+- named fx chains (maybe thread macro style?)
+- with-fx macro, that uses with-out-buffer to rebind *audio-out* to fx chain
+- some mechanism of sending msg to fx chains
+- re-implement pan as an effect... currently it's just a POC
