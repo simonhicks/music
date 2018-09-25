@@ -25,7 +25,12 @@ Top level API that you actually use.
 - also something that lets me update these values^^
 
 ## midi / mpe
-- recording midi input
+[ ] fix broken parts of MPE interpretation
+- pitch-bend is a little weird... not responsive for small movements
+- channel-pressure is a bit weird... not mapped to the synth correctly?
+- control-change is a bit weird... does very weird things... synth broken?
+[ ] helpers for MPE mapping
+[ ] recording midi input as a clip
 
 # fx
 [ ] fx rack in studio.clj

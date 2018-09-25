@@ -7,8 +7,77 @@
 (defprotocol IInstrumentRack
   (set-inst! [rack inst-name instrument])
   (insts [rack])
-  (kill! [rack inst-name])
+  (remove-inst! [rack inst-name])
   (get-channel [rack inst-name channel]))
+
+(def ^:dynamic *pan* 0)
+(def ^:dynamic *audio-out* 0)
+
+(defprotocol ISynthPool
+  (kill-all! [this])
+  (take-synth! [this]))
+
+(deftype SynthPool
+  [creator pool]
+  ISynthPool
+  (kill-all! [this]
+    (->> @pool (map o/kill) doall))
+
+  (take-synth! [this]
+    (dosync
+      (let [taken (first @pool)]
+        (ref-set pool (conj (vec (rest @pool)) (creator)))
+        taken))))
+
+(defn synth-pool
+  [synth n]
+  (SynthPool. synth (->> synth repeatedly (take n) vec ref)))
+
+(deftype SynthRack
+  [active-nodes synth-pools]
+  IInstrumentRack
+  (set-inst! [this inst-name synth-fn]
+    (let [num-channels 16]
+      (when (contains? @synth-pools inst-name)
+        (remove-inst! this inst-name))
+      (swap! synth-pools assoc inst-name (synth-pool synth-fn num-channels))
+      (swap! active-nodes assoc inst-name (->> nil repeat (take num-channels) vec))))
+
+  (insts [rack]
+    (keys @synth-pools))
+
+  (remove-inst! [this inst-name]
+    (->> @active-nodes
+         inst-name
+         (filter o/node-active?)
+         (map o/kill)
+         (doall))
+    (kill-all! (@synth-pools inst-name))
+    (swap! synth-pools dissoc inst-name))
+
+  (get-channel [this inst-name channel]
+    (let [existing (get-in @active-nodes [inst-name channel])
+          node (if (and existing (o/node-active? existing))
+                 existing
+                 (-> (take-synth! (@synth-pools inst-name))
+                     (->> (swap! active-nodes assoc-in [inst-name channel]))
+                     (get-in [inst-name channel])))]
+      (reify IReceiver
+        (send-msg [_ msg-args]
+          (let [args (-> msg-args seq flatten
+                         (concat [:pan *pan* :out *audio-out*]))]
+            (apply o/ctl node args)))))))
+
+(defn synth-rack []
+  (SynthRack. (atom {}) (atom {})))
+
+(defmacro with-pan [n & code]
+  `(binding [*pan* ~n]
+     ~@code))
+
+(defmacro with-out-buffer [n & code]
+  `(binding [*audio-out* ~n]
+     ~@code))
 
 (defprotocol IScheduler
   (next-beat [this])
@@ -25,54 +94,6 @@
   (osc-by-beat [this beat f args])
   (osc-at-bar [this bar f args])
   (osc-by-bar [this bar f args]))
-
-(defn- make-synth-nodes
-  [synth-fn num-nodes]
-  (->> (repeatedly synth-fn)
-       (take num-nodes)
-       (into [])))
-
-(def ^:dynamic *pan* 0)
-(def ^:dynamic *audio-out* 0)
-
-(deftype SynthRack
-  [synth-fns synth-nodes]
-  IInstrumentRack
-  (set-inst! [this inst-name synth-fn]
-    (do
-      (when (contains? @synth-fns inst-name)
-        (kill! this inst-name))
-      (swap! synth-fns assoc inst-name synth-fn)
-      (swap! synth-nodes assoc inst-name (make-synth-nodes synth-fn 16))))
-
-  (insts [rack]
-    (keys @synth-fns))
-
-  (kill! [this inst-name]
-    (->> @synth-nodes
-         inst-name
-         (map o/kill)
-         (doall)))
-
-  (get-channel [this inst-name channel]
-    (reify IReceiver
-      (send-msg [_ msg-args]
-        (let [node (-> @synth-nodes
-                       (get inst-name)
-                       (get channel))
-              args (-> msg-args seq flatten (concat (list :pan *pan* :out *audio-out*)))]
-          (apply o/ctl node args))))))
-
-(defn synth-rack []
-  (SynthRack. (atom {}) (atom {})))
-
-(defmacro with-pan [n & code]
-  `(binding [*pan* ~n]
-     ~@code))
-
-(defmacro with-out-buffer [n & code]
-  `(binding [*audio-out* ~n]
-     ~@code))
 
 (deftype Scheduler [metronome]
   IScheduler
